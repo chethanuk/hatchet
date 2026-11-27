@@ -331,6 +331,53 @@ describe('DurableListenerClient reconnection', () => {
     });
   });
 
+  describe('requests queued while disconnected', () => {
+    it.each([
+      { name: 'one reconnect', failedReconnects: 0 },
+      { name: 'two failed reconnects before a good one', failedReconnects: 2 },
+    ])(
+      'are sent once on the new stream after fresh control requests ($name)',
+      async ({ failedReconnects }) => {
+        const first = tracked(hangingStream());
+        const last = tracked(hangingStream());
+        const sent: any[] = [];
+        let call = 0;
+
+        grpcClient.durableTask.mockImplementation((reqIter: AsyncIterable<any>) => {
+          call++;
+          // Earlier streams never read requests, so everything stays queued.
+          if (call === 1) return first.stream;
+          if (call <= 1 + failedReconnects) return emptyStream();
+          (async () => {
+            for await (const req of reqIter) sent.push(req);
+          })();
+          return last.stream;
+        });
+
+        // A pending callback makes every connect enqueue a workerStatus.
+        (listener as any)._pendingCallbacks.set('task:1:0:1', makeDeferred());
+        await listener.start('w1');
+
+        const ack = listener.sendEvent('task', 1, {
+          kind: 'waitFor',
+          waitForConditions: {},
+          label: 'queued-during-reconnect',
+        } as any);
+        ack.catch(() => {});
+
+        first.end();
+        await settle(100);
+
+        expect(call).toBe(2 + failedReconnects);
+        expect(sent.map((r) => Object.keys(r)[0])).toEqual([
+          'registerWorker',
+          'workerStatus',
+          'waitFor',
+        ]);
+      }
+    );
+  });
+
   // ── _failPendingAcks correctness ──
 
   describe('_failPendingAcks', () => {

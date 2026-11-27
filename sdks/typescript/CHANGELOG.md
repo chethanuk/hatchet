@@ -5,6 +5,12 @@ All notable changes to Hatchet's TypeScript SDK will be documented in this chang
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.49.2] - 2026-11-28
+
+### Fixed
+
+- The durable listener no longer drops requests (`waitFor`, memo, eviction) that were queued while its stream was reconnecting. They are now sent on the new stream after the worker re-registers, so their acks no longer hang. Delivery is at-least-once: a request whose ack was already rejected by the disconnect can still be sent.
+
 ## [1.49.1] - 2026-11-27
 
 ### Fixed

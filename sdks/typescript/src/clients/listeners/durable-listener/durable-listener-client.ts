@@ -291,6 +291,12 @@ export class DurableListenerClient {
 
     this._receiveAbort?.abort();
 
+    // Requests enqueued while disconnected were never sent; carry them over
+    // after registerWorker so their acks don't hang. Skip the old stream's
+    // registerWorker/workerStatus, which this connect re-sends fresh.
+    // Delivery is at-least-once: a request whose ack was already rejected by
+    // _failPendingAcks is still replayed, as in the Python SDK.
+    const unsent = this._requestQueue.filter((r) => !r.registerWorker && !r.workerStatus);
     this._requestQueue = [];
     this._receiveAbort = new AbortController();
 
@@ -299,6 +305,13 @@ export class DurableListenerClient {
     });
 
     this._enqueueFullWorkerStatus();
+
+    if (unsent.length > 0) {
+      this.logger.debug(
+        `durable event listener carried over ${unsent.length} queued request(s) across reconnect`
+      );
+      unsent.forEach((request) => this._enqueueRequest(request));
+    }
 
     void this._streamLoop();
 
