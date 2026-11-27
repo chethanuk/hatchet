@@ -216,10 +216,7 @@ export class ConfigLoader {
 
   static loadYamlConfig(path?: string): ClientConfig | undefined {
     try {
-      const configFile = readFileSync(
-        p.join(__dirname, path ?? this.default_yaml_config_path),
-        'utf8'
-      );
+      const configFile = readFileSync(path ?? this.default_yaml_config_path, 'utf8');
 
       const config = parse(configFile);
 
@@ -227,7 +224,8 @@ export class ConfigLoader {
 
       return config as ClientConfig;
     } catch (e) {
-      if (!path) {
+      // the default file is optional, but one that exists and is broken should not be ignored
+      if (!path && (e as NodeJS.ErrnoException).code === 'ENOENT') {
         return undefined;
       }
 
