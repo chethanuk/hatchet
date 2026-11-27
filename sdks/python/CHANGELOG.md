@@ -135,6 +135,7 @@ V2 removes everything that was deprecated in V1 and tightens the types that were
 - `hatchet.batch_task` accepts `on_events`, `on_crons`, `cron_input`, and `default_additional_metadata`, matching the other standalone task decorators.
 - `hatchet.tenant`, a client for reading details about the current tenant.
 - `Standalone`, the class returned by the `hatchet.task`, `hatchet.durable_task`, and `hatchet.batch_task` decorators, is exported from `hatchet_sdk`.
+- `use_links_instead_of_parent` on the OpenTelemetry config (`HATCHET_CLIENT_OPENTELEMETRY_USE_LINKS_INSTEAD_OF_PARENT`). When set, the `hatchet.start_step_run` span starts a new trace with a link to the incoming traceparent instead of becoming its child, and the durable `wait_for` and child-spawn spans nest under it. Off by default.
 
 ### Deprecated
 

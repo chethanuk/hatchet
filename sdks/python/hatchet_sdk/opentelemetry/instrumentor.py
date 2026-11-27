@@ -33,10 +33,13 @@ try:
         SpanExportResult,
     )
     from opentelemetry.trace import (
+        INVALID_SPAN,
+        Link,
         NoOpTracerProvider,
         SpanKind,
         StatusCode,
         TracerProvider,
+        get_current_span,
         get_tracer,
         get_tracer_provider,
         set_span_in_context,
@@ -445,6 +448,14 @@ class HatchetInstrumentor(BaseInstrumentor):  # type: ignore[misc]
             self._wrap_spawn_children_no_wait,
         )
 
+    def _durable_span_parent(self, instance: DurableContext) -> Context | None:
+        # With links on, the step-run span is a new root, so durable spans nest
+        # under it (the ambient context) instead of the original traceparent.
+        if self._config.otel.use_links_instead_of_parent:
+            return None
+
+        return _parse_carrier_from_metadata(instance._action.additional_metadata)
+
     def _extract_bound_args(
         self,
         wrapped_func: Callable[..., Any],
@@ -487,12 +498,25 @@ class HatchetInstrumentor(BaseInstrumentor):  # type: ignore[misc]
         hatchet_attrs = action.get_otel_attributes(self._config)
         token = ctx_hatchet_span_attributes.set(hatchet_attrs)
 
+        parent_ctx = traceparent
+        links: list[Link] = []
+        if self._config.otel.use_links_instead_of_parent:
+            if traceparent is not None:
+                span_ctx = get_current_span(traceparent).get_span_context()
+                if span_ctx.is_valid:
+                    links = [Link(span_ctx)]
+            # INVALID_SPAN makes this span the root of a new trace while keeping
+            # the rest of the extracted context (e.g. baggage). Starting from an
+            # empty Context when there is no traceparent ignores ambient spans.
+            parent_ctx = set_span_in_context(INVALID_SPAN, traceparent or Context())
+
         try:
             with self._tracer.start_as_current_span(
                 span_name,
                 attributes=hatchet_attrs,
-                context=traceparent,
+                context=parent_ctx,
                 kind=SpanKind.CONSUMER,
+                links=links,
             ) as span:
                 result = await wrapped(*args, **kwargs)
 
@@ -1055,7 +1079,7 @@ class HatchetInstrumentor(BaseInstrumentor):  # type: ignore[misc]
         conditions = cast("tuple[Any, ...]", params[0])
         signal_key = cast("str | None", params[2])
 
-        traceparent = _parse_carrier_from_metadata(instance._action.additional_metadata)
+        traceparent = self._durable_span_parent(instance)
 
         attributes: dict[OTelAttribute, str | int | None] = {
             "signal_key": signal_key,
@@ -1093,7 +1117,7 @@ class HatchetInstrumentor(BaseInstrumentor):  # type: ignore[misc]
 
         configs = cast("list[WorkflowRunTriggerConfig]", params[0])
 
-        traceparent = _parse_carrier_from_metadata(instance._action.additional_metadata)
+        traceparent = self._durable_span_parent(instance)
 
         if len(configs) == 1:
             config = configs[0]

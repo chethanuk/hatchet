@@ -100,6 +100,16 @@ class OpenTelemetryConfig(BaseSettings):
         ),
     )
 
+    use_links_instead_of_parent: bool = Field(
+        default=False,
+        description=(
+            "If true, the `hatchet.start_step_run` span starts a new trace and "
+            "links to the traceparent in the run's metadata instead of becoming "
+            "its child. Useful when a long-lived parent would otherwise collect "
+            "every spawned run in one trace."
+        ),
+    )
+
 
 HTTPMethod = Literal["GET", "DELETE", "POST", "PUT", "PATCH", "HEAD", "OPTIONS"]
 
