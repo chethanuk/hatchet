@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import * as p from 'path';
 import { ChannelCredentials } from 'nice-grpc';
 import { ConfigLoader } from './config-loader';
 import { HatchetClient } from '@hatchet/v1';
@@ -72,7 +75,7 @@ describe('ConfigLoader', () => {
       ConfigLoader.loadClientConfig(
         {},
         {
-          path: './fixtures/not-found.yaml',
+          path: p.join(__dirname, 'fixtures', 'not-found.yaml'),
         }
       )
     ).toThrow();
@@ -84,7 +87,7 @@ describe('ConfigLoader', () => {
       ConfigLoader.loadClientConfig(
         {},
         {
-          path: './fixtures/.hatchet-invalid.yaml',
+          path: p.join(__dirname, 'fixtures', '.hatchet-invalid.yaml'),
         }
       )
     ).toThrow();
@@ -94,7 +97,7 @@ describe('ConfigLoader', () => {
     const config = ConfigLoader.loadClientConfig(
       {},
       {
-        path: './fixtures/.hatchet.yaml',
+        path: p.join(__dirname, 'fixtures', '.hatchet.yaml'),
       }
     );
     expect(config).toEqual({
@@ -145,7 +148,7 @@ describe('ConfigLoader', () => {
     const config = ConfigLoader.loadClientConfig(
       {},
       {
-        path: './fixtures/.hatchet.yaml',
+        path: p.join(__dirname, 'fixtures', '.hatchet.yaml'),
       }
     );
     expect(config).toEqual({
@@ -163,6 +166,44 @@ describe('ConfigLoader', () => {
         enabled: true,
         port: 8002,
       },
+    });
+  });
+
+  describe('yaml path resolution', () => {
+    const originalCwd = process.cwd();
+    let dir: string;
+
+    beforeEach(() => {
+      dir = mkdtempSync(p.join(tmpdir(), 'hatchet-config-'));
+      writeFileSync(p.join(dir, '.hatchet.yaml'), 'host_port: cwd-yaml-host:7070\n');
+    });
+
+    afterEach(() => {
+      process.chdir(originalCwd);
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('should read .hatchet.yaml from the working directory when no path is given', () => {
+      process.chdir(dir);
+      const config = ConfigLoader.loadClientConfig({});
+      expect(config.host_port).toEqual('cwd-yaml-host:7070');
+    });
+
+    it('should throw on an invalid .hatchet.yaml in the working directory', () => {
+      writeFileSync(p.join(dir, '.hatchet.yaml'), 'host_port: 1234\n');
+      process.chdir(dir);
+      expect(() => ConfigLoader.loadClientConfig({})).toThrow('Invalid yaml config');
+    });
+
+    it('should resolve a relative yaml path against the working directory', () => {
+      process.chdir(dir);
+      const config = ConfigLoader.loadClientConfig({}, { path: '.hatchet.yaml' });
+      expect(config.host_port).toEqual('cwd-yaml-host:7070');
+    });
+
+    it('should read an absolute yaml path', () => {
+      const config = ConfigLoader.loadClientConfig({}, { path: p.join(dir, '.hatchet.yaml') });
+      expect(config.host_port).toEqual('cwd-yaml-host:7070');
     });
   });
 });

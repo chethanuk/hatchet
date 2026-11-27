@@ -5,6 +5,12 @@ All notable changes to Hatchet's TypeScript SDK will be documented in this chang
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.49.2] - 2026-11-28
+
+### Fixed
+
+- The client now reads `.hatchet.yaml` from the current working directory when no config path is given. Before, the default path was joined onto the SDK's install directory, so the file was never found and the error was silently ignored. A relative `path` option now resolves against the working directory instead of the SDK's install directory. A `.hatchet.yaml` in the working directory that exists but is invalid now raises an error instead of being skipped.
+
 ## [1.49.1] - 2026-11-27
 
 ### Fixed
